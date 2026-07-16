@@ -388,8 +388,8 @@
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
 <script>
   // ▼▼▼ Spotify Developerダッシュボードで作成したアプリの情報に書き換えてください ▼▼▼
-  const SPOTIFY_CLIENT_ID = 'c9695fec2f654706a714d1bb7accecc2';
-  const REDIRECT_URI = 'https://bo-ta-git.github.io/tap-tempo-finder/';
+  const SPOTIFY_CLIENT_ID = 'YOUR_CLIENT_ID_HERE';
+  const REDIRECT_URI = 'https://YOUR_GITHUB_USERNAME.github.io/YOUR_REPO_NAME/';
   // ▲▲▲ この2つを書き換えたら準備完了です ▲▲▲
 
   const SONGS = [
@@ -657,6 +657,11 @@
       alert('Spotifyの再生準備がまだ整っていません。少し待ってからもう一度お試しください。');
       return;
     }
+    // iOSなどモバイルのブラウザは、タップの直後でないと音声再生を許可しないため、
+    // タップした瞬間（非同期処理に入る前）に再生を許可してもらう
+    if (player && typeof player.activateElement === 'function'){
+      try { player.activateElement(); } catch(e) { /* 古いSDKにはこのメソッドが無い場合がある */ }
+    }
     const originalText = btnEl.textContent;
     btnEl.textContent = '再生中…';
     btnEl.disabled = true;
@@ -668,7 +673,7 @@
       }
       await startPlayback(track.uri);
     } catch(err){
-      alert('再生に失敗しました。少し時間をおいて再度お試しください。');
+      alert('再生に失敗しました。特にiPhoneでは、もう一度ボタンをタップすると成功することがあります。');
       console.error(err);
     } finally {
       btnEl.textContent = originalText;
