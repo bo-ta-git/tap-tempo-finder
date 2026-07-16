@@ -217,6 +217,108 @@
   }
   .sound-toggle input{ accent-color: var(--brass); }
 
+  .listen-zone{
+    position:relative; z-index:1;
+    margin: 0 24px 16px;
+    padding: 18px 20px;
+    border-radius: 20px;
+    border: 1px solid var(--panel-line);
+    background: linear-gradient(180deg, var(--panel), rgba(31,47,40,0.6));
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:12px;
+  }
+  .auto-btn{
+    font-family: var(--font-display);
+    font-weight:700;
+    font-size: 19px;
+    letter-spacing:0.02em;
+    color: var(--ivory);
+    background: transparent;
+    border: 1px solid var(--brass);
+    border-radius: 999px;
+    padding: 14px 28px;
+    cursor:pointer;
+    width:100%;
+  }
+  .auto-btn:active{ background: rgba(212,168,67,0.14); }
+  .auto-btn:disabled{ opacity:0.6; cursor:default; }
+  .listen-hint{
+    margin:0;
+    font-size: 12.5px;
+    color: var(--ivory-dim);
+    text-align:center;
+  }
+  .sensitivity-row{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .sensitivity-label{
+    display:flex;
+    justify-content:space-between;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ivory-dim);
+  }
+  .sensitivity-row input[type="range"]{
+    width:100%;
+    accent-color: var(--brass);
+  }
+
+  .auto-playlist-panel{
+    position:relative; z-index:1;
+    margin: 0 24px 16px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--panel-line);
+    background: rgba(255,255,255,0.015);
+  }
+  .auto-playlist-title{
+    margin: 0 0 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--brass);
+    text-transform: uppercase;
+  }
+  .auto-playlist-list{
+    list-style:none;
+    margin:0; padding:0;
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .auto-playlist-item{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:10px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+  }
+  .auto-playlist-item.active{
+    border-color: var(--brass);
+    background: rgba(212,168,67,0.1);
+  }
+  .auto-playlist-item.active .auto-playlist-song::before{
+    content: "▶ ";
+    color: var(--brass-bright);
+  }
+  .auto-playlist-song{
+    font-size: 13px;
+    color: var(--ivory);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .auto-playlist-artist{
+    font-size: 11.5px;
+    color: var(--ivory-dim);
+    flex-shrink:0;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    max-width: 40%;
+  }
+
   section.matches{
     position:relative; z-index:1;
     padding: 8px 24px 40px;
@@ -400,6 +502,24 @@
     <p class="tap-count" id="tapCount"></p>
   </div>
 
+  <div class="listen-zone">
+    <button class="auto-btn" id="autoBtn" type="button">🔁 このテンポでオート再生</button>
+    <p class="listen-hint" id="autoHint">タップして測定したテンポのまま、近い曲を自動で流し続けます。止めるまでループします。</p>
+    <label class="sound-toggle"><input type="checkbox" id="djModeToggle" checked>DJ風に曲を短く繋いで流す</label>
+    <div class="sensitivity-row">
+      <div class="sensitivity-label">
+        <span>1曲あたりの再生時間</span>
+        <span id="segmentValueLabel">30秒</span>
+      </div>
+      <input type="range" id="segmentSlider" min="15" max="90" step="5" value="30">
+    </div>
+  </div>
+
+  <div class="auto-playlist-panel" id="autoPlaylistPanel" style="display:none;">
+    <p class="auto-playlist-title">オートプレイリスト</p>
+    <ul class="auto-playlist-list" id="autoPlaylistList"></ul>
+  </div>
+
   <div class="controls">
     <button class="reset-btn" id="resetBtn">リセット</button>
     <label class="sound-toggle"><input type="checkbox" id="soundToggle" checked>クリック音</label>
@@ -487,6 +607,11 @@
   const nowPlayingBarEl = document.getElementById('nowPlayingBar');
   const nowPlayingLabelEl = document.getElementById('nowPlayingLabel');
   const stopBtn = document.getElementById('stopBtn');
+  const autoBtnEl = document.getElementById('autoBtn');
+  const autoHintEl = document.getElementById('autoHint');
+  const djModeToggle = document.getElementById('djModeToggle');
+  const segmentSlider = document.getElementById('segmentSlider');
+  const segmentValueLabel = document.getElementById('segmentValueLabel');
 
   let taps = [];
   let intervals = [];
@@ -501,6 +626,20 @@
   let sdkReady = false;
   let isPlaying = false;
   let nowPlayingText = '';
+
+  // ---- オートマティックモードの状態 ----
+  let autoModeActive = false;   // 自動生成した曲リストがループ再生中かどうか
+  let autoQueueUris = [];
+
+  // ---- DJモード（曲を短く区切ってフェードで繋ぐ）の状態 ----
+  let djModeEnabled = true;
+  let segmentSeconds = 30;
+  let lastAutoTrackUri = null;
+  let autoQueueIndex = 0;
+  let segmentTimer = null;
+  let fadeIntervalHandle = null;
+  const FADE_MS = 500;
+  const DEFAULT_VOLUME = 0.8;
 
   function getTempoTerm(bpm){
     if (bpm < 60) return 'Largo';
@@ -654,12 +793,28 @@
       if (!state){
         isPlaying = false;
         nowPlayingText = '';
+        updateAutoPlaylistHighlight(null);
       } else {
         isPlaying = !state.paused;
         const track = state.track_window && state.track_window.current_track;
         if (track){
           const artists = track.artists.map(a => a.name).join(', ');
           nowPlayingText = track.name + ' - ' + artists;
+          updateAutoPlaylistHighlight(track.uri);
+
+          if (autoModeActive && track.uri !== lastAutoTrackUri){
+            const isFirstTrack = (lastAutoTrackUri === null);
+            lastAutoTrackUri = track.uri;
+            if (djModeEnabled){
+              if (!isFirstTrack) fadeIn();
+              scheduleSegmentAdvance();
+            }
+          }
+        }
+        const queueEmpty = !state.track_window || !state.track_window.next_tracks || state.track_window.next_tracks.length === 0;
+        if (autoModeActive && !djModeEnabled && state.paused && queueEmpty){
+          // オートモードのキュー(フル再生)が最後まで流れきったので、同じテンポの曲でループする
+          startPlayback(autoQueueUris).catch(() => {});
         }
       }
       updateNowPlayingUI();
@@ -668,7 +823,18 @@
   }
 
   async function stopPlayback(){
+    autoModeActive = false;
+    autoQueueUris = [];
+    autoQueueIndex = 0;
+    lastAutoTrackUri = null;
+    clearSegmentTimers();
+    renderAutoPlaylistPanel([]);
+    if (autoBtnEl){
+      autoBtnEl.textContent = AUTO_DEFAULT_LABEL;
+      autoBtnEl.disabled = false;
+    }
     if (!player) return;
+    try{ await player.setVolume(DEFAULT_VOLUME); } catch(e){ /* ignore */ }
     try{
       await player.pause();
     } catch(e){
@@ -717,17 +883,20 @@
     return data.tracks && data.tracks.items && data.tracks.items[0];
   }
 
-  async function startPlayback(uri, retried){
+  async function startPlayback(uriOrUris, offsetIndex, retried){
+    const uriList = Array.isArray(uriOrUris) ? uriOrUris : [uriOrUris];
+    const body = { uris: uriList };
+    if (typeof offsetIndex === 'number') body.offset = { position: offsetIndex };
     const resp = await fetch('https://api.spotify.com/v1/me/player/play?device_id=' + deviceId, {
       method: 'PUT',
       headers: {
         Authorization: 'Bearer ' + accessToken,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ uris: [uri] }),
+      body: JSON.stringify(body),
     });
     if (resp.status === 401 && !retried){
-      if (await refreshAccessToken()) return startPlayback(uri, true);
+      if (await refreshAccessToken()) return startPlayback(uriOrUris, offsetIndex, true);
       return;
     }
     if (!resp.ok) throw new Error('playback failed: ' + resp.status);
@@ -928,6 +1097,174 @@
     matchesHintEl.style.display = 'block';
     updateDisplay();
   });
+
+  // ---------- オートマティックモード（今のテンポでプレイリストを自動再生） ----------
+  const AUTO_DEFAULT_LABEL = '🔁 このテンポでオート再生';
+  const AUTO_STOP_LABEL = '■ オート再生を停止';
+
+  autoBtnEl.addEventListener('click', () => {
+    if (autoModeActive){
+      stopPlayback();
+      return;
+    }
+    if (lastBpm === null){
+      alert('先に画面をタップしてテンポを計測してください。');
+      return;
+    }
+    if (!accessToken || !deviceId){
+      alert('オートマティックモードを使うには、先にSpotifyへログインして再生準備が整っている必要があります。');
+      return;
+    }
+    // 曲検索など非同期処理のあとに再生しても許可されるよう、タップした瞬間に再生を許可してもらう
+    if (player && typeof player.activateElement === 'function'){
+      try { player.activateElement(); } catch(e) { /* 古いSDKにはこのメソッドが無い場合がある */ }
+    }
+    startAutoPlaylist(lastBpm);
+  });
+
+  djModeToggle.addEventListener('change', () => {
+    djModeEnabled = djModeToggle.checked;
+    if (!djModeEnabled){
+      clearSegmentTimers();
+      if (player) player.setVolume(DEFAULT_VOLUME).catch(() => {});
+    } else if (autoModeActive){
+      scheduleSegmentAdvance();
+    }
+  });
+
+  segmentSlider.addEventListener('input', () => {
+    segmentSeconds = Number(segmentSlider.value);
+    segmentValueLabel.textContent = segmentSeconds + '秒';
+    if (autoModeActive && djModeEnabled) scheduleSegmentAdvance();
+  });
+
+  async function startAutoPlaylist(bpm){
+    autoBtnEl.disabled = true;
+    autoBtnEl.textContent = '曲を検索中…';
+
+    const scored = SONGS.map(s => {
+      const candidates = [
+        {diff: Math.abs(s.bpm - bpm)},
+        {diff: Math.abs(s.bpm - bpm * 2)},
+        {diff: Math.abs(s.bpm - bpm / 2)},
+      ];
+      candidates.sort((a, b) => a.diff - b.diff);
+      return {song: s, diff: candidates[0].diff};
+    });
+    scored.sort((a, b) => a.diff - b.diff);
+    let selected = scored.filter(x => x.diff <= 8);
+    if (selected.length < 3) selected = scored.slice(0, 5);
+    else selected = selected.slice(0, 8);
+
+    const uris = [];
+    const queuedSongs = [];
+    for (const {song} of selected){
+      try{
+        const track = await searchTrack(song);
+        if (track){
+          uris.push(track.uri);
+          queuedSongs.push({song, uri: track.uri});
+        }
+      } catch(e){ console.error(e); }
+    }
+
+    if (uris.length === 0){
+      alert('該当する曲がSpotifyで見つかりませんでした。');
+      autoBtnEl.textContent = AUTO_DEFAULT_LABEL;
+      autoBtnEl.disabled = false;
+      return;
+    }
+
+    renderAutoPlaylistPanel(queuedSongs);
+
+    if (player && typeof player.activateElement === 'function'){
+      try{ player.activateElement(); } catch(e){ /* ignore */ }
+    }
+
+    lastAutoTrackUri = null;
+    autoQueueIndex = 0;
+    clearSegmentTimers();
+    if (player){ try{ await player.setVolume(DEFAULT_VOLUME); } catch(e){} }
+
+    autoQueueUris = uris;
+    autoModeActive = true;
+    try{
+      await startPlayback(uris);
+    } catch(e){
+      alert('再生に失敗しました。特にiPhoneでは、もう一度ボタンをタップすると成功することがあります。');
+      autoModeActive = false;
+    }
+
+    autoBtnEl.textContent = autoModeActive ? AUTO_STOP_LABEL : AUTO_DEFAULT_LABEL;
+    autoBtnEl.disabled = false;
+  }
+
+  function renderAutoPlaylistPanel(entries){
+    const panelEl = document.getElementById('autoPlaylistPanel');
+    const listEl = document.getElementById('autoPlaylistList');
+    listEl.innerHTML = '';
+    entries.forEach(({song, uri}) => {
+      const li = document.createElement('li');
+      li.className = 'auto-playlist-item';
+      li.dataset.uri = uri;
+      li.innerHTML =
+        '<span class="auto-playlist-song">' + escapeHtml(song.title) + '</span>' +
+        '<span class="auto-playlist-artist">' + escapeHtml(song.artist) + '</span>';
+      listEl.appendChild(li);
+    });
+    panelEl.style.display = entries.length ? 'block' : 'none';
+  }
+
+  function updateAutoPlaylistHighlight(currentUri){
+    document.querySelectorAll('.auto-playlist-item').forEach(li => {
+      if (currentUri && li.dataset.uri === currentUri) li.classList.add('active');
+      else li.classList.remove('active');
+    });
+  }
+
+  function clearSegmentTimers(){
+    if (segmentTimer){ clearTimeout(segmentTimer); segmentTimer = null; }
+    if (fadeIntervalHandle){ clearInterval(fadeIntervalHandle); fadeIntervalHandle = null; }
+  }
+
+  function scheduleSegmentAdvance(){
+    clearSegmentTimers();
+    if (!autoModeActive || !djModeEnabled) return;
+    const playMs = Math.max(4000, segmentSeconds * 1000 - FADE_MS);
+    segmentTimer = setTimeout(fadeOutThenNext, playMs);
+  }
+
+  function fadeOutThenNext(){
+    if (!player || !autoModeActive || autoQueueUris.length === 0) return;
+    const steps = 6;
+    const stepMs = FADE_MS / steps;
+    let i = 0;
+    fadeIntervalHandle = setInterval(async () => {
+      i++;
+      const v = Math.max(0, DEFAULT_VOLUME * (1 - i / steps));
+      try{ await player.setVolume(v); } catch(e){ /* ignore */ }
+      if (i >= steps){
+        clearInterval(fadeIntervalHandle);
+        fadeIntervalHandle = null;
+        // SDKのnextTrack()には頼らず、自前でインデックスを進めて再生を開始する
+        autoQueueIndex = (autoQueueIndex + 1) % autoQueueUris.length;
+        try{ await startPlayback(autoQueueUris, autoQueueIndex); } catch(e){ console.error(e); }
+      }
+    }, stepMs);
+  }
+
+  function fadeIn(){
+    if (!player) return;
+    const steps = 6;
+    const stepMs = FADE_MS / steps;
+    let i = 0;
+    const handle = setInterval(async () => {
+      i++;
+      const v = Math.min(DEFAULT_VOLUME, DEFAULT_VOLUME * (i / steps));
+      try{ await player.setVolume(v); } catch(e){ /* ignore */ }
+      if (i >= steps) clearInterval(handle);
+    }, stepMs);
+  }
 </script>
 </body>
 </html>
