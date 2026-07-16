@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>TAP TEMPO — タップでテンポを測って曲を探す</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #182420;
+    --bg-deep: #11190f;
+    --panel: #1f2f28;
+    --panel-line: rgba(212,168,67,0.22);
+    --brass: #d4a843;
+    --brass-bright: #f0c463;
+    --brass-dim: #8a6f36;
+    --ivory: #eee7d6;
+    --ivory-dim: #a6a294;
+    --font-display: 'Big Shoulders Display', sans-serif;
+    --font-body: 'Source Serif 4', serif;
+    --font-mono: 'Space Mono', monospace;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background: var(--bg-deep);
+    -webkit-tap-highlight-color: transparent;
+  }
+  body{
+    min-height: 100dvh;
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+    background:
+      radial-gradient(ellipse at 50% -10%, rgba(212,168,67,0.08), transparent 55%),
+      var(--bg-deep);
+    font-family: var(--font-body);
+    color: var(--ivory);
+  }
+  .phone{
+    width:100%;
+    max-width:480px;
+    min-height:100dvh;
+    background: var(--bg);
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    box-shadow: 0 0 60px rgba(0,0,0,0.5);
+    overflow-x:hidden;
+  }
+  .phone::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+    pointer-events:none;
+  }
+
+  header.masthead{
+    padding: 28px 24px 8px;
+    position:relative;
+    z-index:1;
+  }
+  .eyebrow{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--brass);
+    margin:0 0 6px;
+    text-transform:uppercase;
+  }
+  h1{
+    font-family: var(--font-display);
+    font-weight:800;
+    font-size: 44px;
+    letter-spacing: 0.02em;
+    margin:0;
+    line-height:0.95;
+    color: var(--ivory);
+  }
+  .lede{
+    margin: 10px 0 0;
+    font-size: 14.5px;
+    line-height:1.6;
+    color: var(--ivory-dim);
+    max-width: 34ch;
+  }
+
+  section.readout{
+    position:relative; z-index:1;
+    display:flex;
+    align-items:center;
+    gap: 18px;
+    padding: 10px 24px 4px;
+  }
+  .pendulum{ width: 64px; height: 74px; flex-shrink:0; overflow:visible; }
+  .pivot-base{ stroke:none; }
+  .arm-line{ stroke: var(--brass-dim); stroke-width:3; stroke-linecap:round; }
+  .arm-weight{ fill: var(--brass); }
+  .pivot{ fill: var(--ivory-dim); }
+  .pendulum-arm{ transform-box: fill-box; }
+  .pendulum-arm.swinging{
+    animation-name: swing;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+  }
+  @keyframes swing{
+    0%{ transform: rotate(-24deg); }
+    50%{ transform: rotate(24deg); }
+    100%{ transform: rotate(-24deg); }
+  }
+
+  .bpm-block{ display:flex; align-items:baseline; gap:6px; }
+  .bpm-number{
+    font-family: var(--font-mono);
+    font-weight:700;
+    font-size: 52px;
+    line-height:1;
+    color: var(--ivory);
+    min-width: 1.5ch;
+  }
+  .bpm-unit{
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--brass);
+    letter-spacing:0.08em;
+  }
+  .tempo-term{
+    position:absolute;
+    right:24px; top: 50%;
+    transform: translateY(-50%);
+    margin:0;
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight:700;
+    letter-spacing:0.04em;
+    color: var(--brass-bright);
+    text-align:right;
+  }
+
+  .tap-zone{
+    position:relative; z-index:1;
+    margin: 18px 24px 14px;
+    flex: 0 0 auto;
+    height: 34vh;
+    min-height:220px;
+    border-radius: 20px;
+    border: 1px solid var(--panel-line);
+    background: linear-gradient(180deg, var(--panel), rgba(31,47,40,0.6));
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    -webkit-user-select:none; user-select:none;
+    -webkit-touch-callout:none;
+    touch-action: manipulation;
+    overflow:hidden;
+  }
+  .tap-zone:active{ background: linear-gradient(180deg, #24382f, rgba(31,47,40,0.6)); }
+  .tap-instruction{
+    margin:0;
+    font-family: var(--font-display);
+    font-weight:700;
+    font-size: 22px;
+    letter-spacing:0.05em;
+    color: var(--ivory-dim);
+    pointer-events:none;
+  }
+  .tap-count{
+    margin: 6px 0 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--brass-dim);
+    pointer-events:none;
+  }
+  .ripple{
+    position:absolute;
+    width: 16px; height:16px;
+    border-radius:50%;
+    background: rgba(212,168,67,0.35);
+    transform: translate(-50%,-50%) scale(0);
+    pointer-events:none;
+    animation: rippleOut 0.55s ease-out forwards;
+  }
+  @keyframes rippleOut{
+    from{ transform: translate(-50%,-50%) scale(0); opacity:0.7; }
+    to{ transform: translate(-50%,-50%) scale(14); opacity:0; }
+  }
+
+  .controls{
+    position:relative; z-index:1;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 0 24px 14px;
+  }
+  .reset-btn{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing:0.06em;
+    color: var(--ivory);
+    background: transparent;
+    border: 1px solid var(--panel-line);
+    border-radius: 999px;
+    padding: 8px 16px;
+    cursor:pointer;
+  }
+  .reset-btn:active{ background: rgba(212,168,67,0.12); }
+  .sound-toggle{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ivory-dim);
+    display:flex; align-items:center; gap:6px;
+    cursor:pointer;
+  }
+  .sound-toggle input{ accent-color: var(--brass); }
+
+  section.matches{
+    position:relative; z-index:1;
+    padding: 8px 24px 40px;
+    flex:1;
+  }
+  section.matches h2{
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight:700;
+    letter-spacing:0.02em;
+    margin: 10px 0 4px;
+    color: var(--ivory);
+  }
+  .matches-hint{
+    font-size: 13px;
+    color: var(--ivory-dim);
+    margin: 0 0 12px;
+  }
+  .song-list{
+    list-style:none;
+    margin:0; padding:0;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .song-item{
+    display:flex;
+    flex-direction:column;
+    gap: 9px;
+    padding: 11px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--panel-line);
+    background: rgba(255,255,255,0.015);
+  }
+  .song-item.exact{ border-color: var(--brass); background: rgba(212,168,67,0.08); }
+  .song-item.close{ border-color: var(--panel-line); }
+  .song-item.far{ opacity: 0.55; }
+  .song-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 12px;
+  }
+  .song-main{ display:flex; flex-direction:column; min-width:0; }
+  .song-title{
+    font-size: 14.5px;
+    font-weight:600;
+    color: var(--ivory);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .song-artist{
+    font-size: 12.5px;
+    color: var(--ivory-dim);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .song-meta{
+    display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0;
+    font-family: var(--font-mono);
+  }
+  .song-bpm{ font-size:13px; color: var(--brass-bright); }
+  .song-badge{ font-size:10.5px; color: var(--ivory-dim); margin-top:2px; }
+  .song-spotify{
+    display:block;
+    width:100%;
+    text-align:center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing:0.02em;
+    color: var(--brass-bright);
+    text-decoration:none;
+    background: transparent;
+    border: 1px solid var(--brass-dim);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin:0;
+    cursor:pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .song-spotify:active{ background: rgba(212,168,67,0.14); }
+  .song-spotify.song-spotify-play{ border-color: var(--brass); font-weight:700; }
+  .song-spotify:disabled{ opacity:0.6; cursor:default; }
+
+  .spotify-bar{
+    position:relative; z-index:1;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin: 0 24px 16px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--panel-line);
+    background: rgba(255,255,255,0.02);
+  }
+  .spotify-status{
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ivory-dim);
+  }
+  .spotify-btn{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing:0.03em;
+    color: var(--bg-deep);
+    background: var(--brass);
+    border: none;
+    border-radius: 999px;
+    padding: 8px 14px;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .spotify-btn:active{ background: var(--brass-bright); }
+
+  .footnote{
+    margin-top: 18px;
+    font-size: 11.5px;
+    line-height:1.6;
+    color: var(--ivory-dim);
+    opacity:0.8;
+  }
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <header class="masthead">
+    <p class="eyebrow">METRONOME → PLAYLIST</p>
+    <h1>TAP TEMPO</h1>
+    <p class="lede">画面を一定のリズムでタップすると、そのテンポに近い曲を探します。</p>
+  </header>
+
+  <section class="readout">
+    <svg class="pendulum" viewBox="0 0 120 140">
+      <g id="pendulumArm" class="pendulum-arm">
+        <line x1="60" y1="130" x2="60" y2="20" class="arm-line"/>
+        <circle cx="60" cy="20" r="7" class="arm-weight"/>
+      </g>
+      <circle cx="60" cy="130" r="5" class="pivot"/>
+    </svg>
+    <div class="bpm-block">
+      <span class="bpm-number" id="bpmNumber">--</span>
+      <span class="bpm-unit">BPM</span>
+    </div>
+    <p class="tempo-term" id="tempoTerm">待機中</p>
+  </section>
+
+  <div class="tap-zone" id="tapZone">
+    <p class="tap-instruction">ここをタップ</p>
+    <p class="tap-count" id="tapCount"></p>
+  </div>
+
+  <div class="controls">
+    <button class="reset-btn" id="resetBtn">リセット</button>
+    <label class="sound-toggle"><input type="checkbox" id="soundToggle" checked>クリック音</label>
+  </div>
+
+  <div class="spotify-bar">
+    <span class="spotify-status" id="spotifyStatus">Spotify: 未接続</span>
+    <button class="spotify-btn" id="spotifyAuthBtn" type="button">Spotifyでログイン</button>
+  </div>
+
+  <section class="matches">
+    <h2>このテンポに近い曲</h2>
+    <p class="matches-hint" id="matchesHint">4回ほどタップすると候補が表示されます。</p>
+    <ul class="song-list" id="songList"></ul>
+    <p class="footnote">収録曲のBPMはおおよその目安です。編曲やライブ版ではテンポが異なる場合があります。「倍速」「半分の速さ」は、タップした速さのちょうど2倍・0.5倍に近い曲を表します。Spotifyにログインして再生準備が整うと、ボタンが「▶ Spotifyで再生」に変わり、タップした瞬間にこの画面上でその曲がそのまま再生されます（Spotify Premiumが必要です）。ログインしていない場合は、Spotifyの検索結果を開くリンクが表示されます。</p>
+  </section>
+
+</div>
+
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+<script>
+  // ▼▼▼ Spotify Developerダッシュボードで作成したアプリの情報に書き換えてください ▼▼▼
+  const SPOTIFY_CLIENT_ID = 'YOUR_CLIENT_ID_HERE';
+  const REDIRECT_URI = 'https://YOUR_GITHUB_USERNAME.github.io/YOUR_REPO_NAME/';
+  // ▲▲▲ この2つを書き換えたら準備完了です ▲▲▲
+
+  const SONGS = [
+    {title:"Someone Like You", artist:"Adele", bpm:67},
+    {title:"Perfect", artist:"Ed Sheeran", bpm:63},
+    {title:"All of Me", artist:"John Legend", bpm:63},
+    {title:"Hotel California", artist:"Eagles", bpm:75},
+    {title:"We Will Rock You", artist:"Queen", bpm:81},
+    {title:"Lemon", artist:"米津玄師", bpm:87},
+    {title:"Can't Stop", artist:"Red Hot Chili Peppers", bpm:91},
+    {title:"Africa", artist:"Toto", bpm:96},
+    {title:"Shape of You", artist:"Ed Sheeran", bpm:96},
+    {title:"Watermelon Sugar", artist:"Harry Styles", bpm:95},
+    {title:"Dancing Queen", artist:"ABBA", bpm:100},
+    {title:"Levitating", artist:"Dua Lipa", bpm:103},
+    {title:"Stayin' Alive", artist:"Bee Gees", bpm:104},
+    {title:"Rolling in the Deep", artist:"Adele", bpm:105},
+    {title:"Uptown Girl", artist:"Billy Joel", bpm:108},
+    {title:"Eye of the Tiger", artist:"Survivor", bpm:109},
+    {title:"Another One Bites the Dust", artist:"Queen", bpm:110},
+    {title:"Can't Stop the Feeling!", artist:"Justin Timberlake", bpm:113},
+    {title:"Uptown Funk", artist:"Mark Ronson ft. Bruno Mars", bpm:115},
+    {title:"Get Lucky", artist:"Daft Punk ft. Pharrell Williams", bpm:116},
+    {title:"Billie Jean", artist:"Michael Jackson", bpm:117},
+    {title:"Don't Stop Believin'", artist:"Journey", bpm:119},
+    {title:"I Wanna Dance with Somebody", artist:"Whitney Houston", bpm:119},
+    {title:"Livin' on a Prayer", artist:"Bon Jovi", bpm:122},
+    {title:"One More Time", artist:"Daft Punk", bpm:123},
+    {title:"Seven Nation Army", artist:"The White Stripes", bpm:124},
+    {title:"Sweet Child O' Mine", artist:"Guns N' Roses", bpm:125},
+    {title:"September", artist:"Earth, Wind & Fire", bpm:126},
+    {title:"アイドル", artist:"YOASOBI", bpm:128},
+    {title:"Pretender", artist:"Official髭男dism", bpm:130},
+    {title:"残酷な天使のテーゼ", artist:"高橋洋子", bpm:130},
+    {title:"Clocks", artist:"Coldplay", bpm:131},
+    {title:"Thunderstruck", artist:"AC/DC", bpm:133},
+    {title:"Viva La Vida", artist:"Coldplay", bpm:138},
+    {title:"紅蓮華", artist:"LiSA", bpm:138},
+    {title:"Mr. Brightside", artist:"The Killers", bpm:148},
+    {title:"Happy", artist:"Pharrell Williams", bpm:160},
+    {title:"Take on Me", artist:"a-ha", bpm:169},
+    {title:"Blinding Lights", artist:"The Weeknd", bpm:171},
+  ];
+
+  const bpmNumberEl = document.getElementById('bpmNumber');
+  const tempoTermEl = document.getElementById('tempoTerm');
+  const tapCountEl = document.getElementById('tapCount');
+  const tapZone = document.getElementById('tapZone');
+  const pendulumArm = document.getElementById('pendulumArm');
+  const songListEl = document.getElementById('songList');
+  const matchesHintEl = document.getElementById('matchesHint');
+  const resetBtn = document.getElementById('resetBtn');
+  const soundToggle = document.getElementById('soundToggle');
+  const spotifyStatusEl = document.getElementById('spotifyStatus');
+  const spotifyAuthBtn = document.getElementById('spotifyAuthBtn');
+
+  let taps = [];
+  let intervals = [];
+  let audioCtx = null;
+  let lastBpm = null;
+
+  // ---- Spotify連携の状態 ----
+  let accessToken = null;
+  let tokenExpiresAt = 0;
+  let player = null;
+  let deviceId = null;
+  let sdkReady = false;
+
+  function getTempoTerm(bpm){
+    if (bpm < 60) return 'Largo';
+    if (bpm < 66) return 'Larghetto';
+    if (bpm < 76) return 'Adagio';
+    if (bpm < 108) return 'Andante';
+    if (bpm < 120) return 'Moderato';
+    if (bpm < 156) return 'Allegro';
+    if (bpm < 176) return 'Vivace';
+    if (bpm < 200) return 'Presto';
+    return 'Prestissimo';
+  }
+
+  function escapeHtml(str){
+    return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  // ---------- Spotify: PKCE認証 ----------
+  function generateRandomString(length){
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const randomValues = crypto.getRandomValues(new Uint8Array(length));
+    let text = '';
+    randomValues.forEach(v => { text += possible[v % possible.length]; });
+    return text;
+  }
+
+  async function sha256(plain){
+    const data = new TextEncoder().encode(plain);
+    return crypto.subtle.digest('SHA-256', data);
+  }
+
+  function base64UrlEncode(buffer){
+    let str = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) str += String.fromCharCode(bytes[i]);
+    return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  async function redirectToSpotifyAuth(){
+    const codeVerifier = generateRandomString(64);
+    sessionStorage.setItem('spotify_code_verifier', codeVerifier);
+    const codeChallenge = base64UrlEncode(await sha256(codeVerifier));
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: SPOTIFY_CLIENT_ID,
+      scope: 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state',
+      code_challenge_method: 'S256',
+      code_challenge: codeChallenge,
+      redirect_uri: REDIRECT_URI,
+    });
+    window.location.href = 'https://accounts.spotify.com/authorize?' + params.toString();
+  }
+
+  async function handleAuthRedirect(){
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code) return false;
+    const codeVerifier = sessionStorage.getItem('spotify_code_verifier');
+    if (!codeVerifier) return false;
+
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: REDIRECT_URI,
+      client_id: SPOTIFY_CLIENT_ID,
+      code_verifier: codeVerifier,
+    });
+    const resp = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body,
+    });
+    const data = await resp.json();
+    if (data.access_token){
+      applyToken(data);
+      window.history.replaceState({}, document.title, REDIRECT_URI);
+      return true;
+    }
+    return false;
+  }
+
+  function applyToken(data){
+    accessToken = data.access_token;
+    tokenExpiresAt = Date.now() + data.expires_in * 1000;
+    sessionStorage.setItem('spotify_access_token', accessToken);
+    sessionStorage.setItem('spotify_token_expires_at', String(tokenExpiresAt));
+    if (data.refresh_token){
+      sessionStorage.setItem('spotify_refresh_token', data.refresh_token);
+    }
+  }
+
+  async function refreshAccessToken(){
+    const rt = sessionStorage.getItem('spotify_refresh_token');
+    if (!rt) return false;
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: rt,
+      client_id: SPOTIFY_CLIENT_ID,
+    });
+    const resp = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body,
+    });
+    const data = await resp.json();
+    if (data.access_token){
+      applyToken(data);
+      return true;
+    }
+    return false;
+  }
+
+  function logoutSpotify(){
+    ['spotify_access_token','spotify_refresh_token','spotify_token_expires_at','spotify_code_verifier']
+      .forEach(k => sessionStorage.removeItem(k));
+    accessToken = null;
+    deviceId = null;
+    if (player){ player.disconnect(); player = null; }
+    updateSpotifyStatusUI();
+    if (lastBpm !== null) renderMatches(lastBpm);
+  }
+
+  // ---------- Spotify: Web Playback SDK ----------
+  window.onSpotifyWebPlaybackSDKReady = () => {
+    sdkReady = true;
+    tryInitPlayer();
+  };
+
+  function tryInitPlayer(){
+    if (player || !sdkReady || !accessToken || !window.Spotify) return;
+    player = new Spotify.Player({
+      name: 'Tap Tempo Finder',
+      getOAuthToken: cb => cb(accessToken),
+      volume: 0.8,
+    });
+    player.addListener('ready', ({device_id}) => {
+      deviceId = device_id;
+      updateSpotifyStatusUI();
+      if (lastBpm !== null) renderMatches(lastBpm);
+    });
+    player.addListener('not_ready', () => {
+      deviceId = null;
+      updateSpotifyStatusUI();
+    });
+    player.addListener('authentication_error', () => { refreshAccessToken(); });
+    player.connect();
+  }
+
+  function updateSpotifyStatusUI(){
+    if (!accessToken){
+      spotifyStatusEl.textContent = 'Spotify: 未接続';
+      spotifyAuthBtn.textContent = 'Spotifyでログイン';
+    } else if (!deviceId){
+      spotifyStatusEl.textContent = 'Spotify: 準備中…';
+      spotifyAuthBtn.textContent = 'ログアウト';
+    } else {
+      spotifyStatusEl.textContent = 'Spotify: 再生準備OK';
+      spotifyAuthBtn.textContent = 'ログアウト';
+    }
+  }
+
+  spotifyAuthBtn.addEventListener('click', () => {
+    if (accessToken) logoutSpotify();
+    else redirectToSpotifyAuth();
+  });
+
+  async function searchTrack(song, retried){
+    const q = encodeURIComponent(song.title + ' ' + song.artist);
+    const resp = await fetch('https://api.spotify.com/v1/search?q=' + q + '&type=track&limit=1', {
+      headers: { Authorization: 'Bearer ' + accessToken },
+    });
+    if (resp.status === 401 && !retried){
+      if (await refreshAccessToken()) return searchTrack(song, true);
+    }
+    const data = await resp.json();
+    return data.tracks && data.tracks.items && data.tracks.items[0];
+  }
+
+  async function startPlayback(uri, retried){
+    const resp = await fetch('https://api.spotify.com/v1/me/player/play?device_id=' + deviceId, {
+      method: 'PUT',
+      headers: {
+        Authorization: 'Bearer ' + accessToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ uris: [uri] }),
+    });
+    if (resp.status === 401 && !retried){
+      if (await refreshAccessToken()) return startPlayback(uri, true);
+      return;
+    }
+    if (!resp.ok) throw new Error('playback failed: ' + resp.status);
+  }
+
+  async function playOnSpotify(song, btnEl){
+    if (!accessToken || !deviceId){
+      alert('Spotifyの再生準備がまだ整っていません。少し待ってからもう一度お試しください。');
+      return;
+    }
+    const originalText = btnEl.textContent;
+    btnEl.textContent = '再生中…';
+    btnEl.disabled = true;
+    try{
+      const track = await searchTrack(song);
+      if (!track){
+        alert('該当する曲がSpotifyで見つかりませんでした。');
+        return;
+      }
+      await startPlayback(track.uri);
+    } catch(err){
+      alert('再生に失敗しました。少し時間をおいて再度お試しください。');
+      console.error(err);
+    } finally {
+      btnEl.textContent = originalText;
+      btnEl.disabled = false;
+    }
+  }
+
+  async function bootstrapSpotifyAuth(){
+    const handled = await handleAuthRedirect();
+    if (!handled){
+      const storedToken = sessionStorage.getItem('spotify_access_token');
+      const expiresAt = Number(sessionStorage.getItem('spotify_token_expires_at') || 0);
+      if (storedToken && Date.now() < expiresAt){
+        accessToken = storedToken;
+      } else if (sessionStorage.getItem('spotify_refresh_token')){
+        await refreshAccessToken();
+      }
+    }
+    updateSpotifyStatusUI();
+    if (accessToken) tryInitPlayer();
+  }
+
+  bootstrapSpotifyAuth();
+
+
+  function playClick(){
+    if (!soundToggle.checked) return;
+    try{
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 1000;
+      gain.gain.setValueAtTime(0.16, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.05);
+    }catch(e){ /* audio not available, ignore */ }
+  }
+
+  function spawnRipple(x, y){
+    const rect = tapZone.getBoundingClientRect();
+    const ripple = document.createElement('div');
+    ripple.className = 'ripple';
+    ripple.style.left = (x - rect.left) + 'px';
+    ripple.style.top = (y - rect.top) + 'px';
+    tapZone.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 600);
+  }
+
+  function updatePendulum(avgIntervalMs){
+    const duration = Math.max(0.2, (avgIntervalMs * 2) / 1000);
+    pendulumArm.style.animationDuration = duration + 's';
+    pendulumArm.classList.add('swinging');
+  }
+
+  function stopPendulum(){
+    pendulumArm.classList.remove('swinging');
+    pendulumArm.style.animation = 'none';
+  }
+
+  function buildSongAction(song){
+    if (accessToken && deviceId){
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'song-spotify song-spotify-play';
+      btn.textContent = '▶ Spotifyで再生';
+      btn.addEventListener('click', () => playOnSpotify(song, btn));
+      return btn;
+    }
+    const a = document.createElement('a');
+    a.className = 'song-spotify';
+    a.href = 'https://open.spotify.com/search/' + encodeURIComponent(song.title + ' ' + song.artist);
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = 'Spotifyで検索して再生 ↗';
+    return a;
+  }
+
+  function renderMatches(bpm){
+    lastBpm = bpm;
+    const scored = SONGS.map(s => {
+      const candidates = [
+        {diff: Math.abs(s.bpm - bpm), label:'同じ速さ'},
+        {diff: Math.abs(s.bpm - bpm * 2), label:'半分の速さ'},
+        {diff: Math.abs(s.bpm - bpm / 2), label:'倍速'},
+      ];
+      candidates.sort((a,b) => a.diff - b.diff);
+      return {song: s, best: candidates[0]};
+    });
+    scored.sort((a,b) => a.best.diff - b.best.diff);
+    const top = scored.slice(0, 7);
+
+    songListEl.innerHTML = '';
+    top.forEach(({song, best}) => {
+      const closeness = best.diff <= 3 ? 'exact' : (best.diff <= 8 ? 'close' : 'far');
+      const li = document.createElement('li');
+      li.className = 'song-item ' + closeness;
+
+      const topRow = document.createElement('div');
+      topRow.className = 'song-top';
+      topRow.innerHTML =
+        '<div class="song-main">' +
+          '<span class="song-title">' + escapeHtml(song.title) + '</span>' +
+          '<span class="song-artist">' + escapeHtml(song.artist) + '</span>' +
+        '</div>' +
+        '<div class="song-meta">' +
+          '<span class="song-bpm">' + song.bpm + ' BPM</span>' +
+          '<span class="song-badge">' + best.label + '</span>' +
+        '</div>';
+
+      li.appendChild(topRow);
+      li.appendChild(buildSongAction(song));
+      songListEl.appendChild(li);
+    });
+  }
+
+  function updateDisplay(){
+    tapCountEl.textContent = taps.length > 0 ? ('タップ ' + taps.length + '回') : '';
+
+    if (intervals.length === 0){
+      bpmNumberEl.textContent = '--';
+      tempoTermEl.textContent = taps.length === 0 ? '待機中' : 'もう一度タップ';
+      stopPendulum();
+      return;
+    }
+
+    const avg = intervals.reduce((a,b) => a + b, 0) / intervals.length;
+    const bpm = Math.round(60000 / avg);
+    bpmNumberEl.textContent = bpm;
+    tempoTermEl.textContent = getTempoTerm(bpm);
+    updatePendulum(avg);
+
+    if (intervals.length >= 3){
+      matchesHintEl.style.display = 'none';
+      renderMatches(bpm);
+    }
+  }
+
+  function handleTap(clientX, clientY){
+    const now = performance.now();
+    playClick();
+    spawnRipple(clientX, clientY);
+
+    if (taps.length > 0){
+      const gap = now - taps[taps.length - 1];
+      if (gap > 2500){
+        taps = [];
+        intervals = [];
+      } else if (gap < 100){
+        return; // 誤タップ・多重発火のノイズを無視
+      } else {
+        intervals.push(gap);
+        if (intervals.length > 8) intervals.shift();
+      }
+    }
+    taps.push(now);
+    updateDisplay();
+  }
+
+  tapZone.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handleTap(e.clientX, e.clientY);
+  });
+
+  resetBtn.addEventListener('click', () => {
+    taps = [];
+    intervals = [];
+    songListEl.innerHTML = '';
+    matchesHintEl.style.display = 'block';
+    updateDisplay();
+  });
+</script>
+</body>
+</html>
