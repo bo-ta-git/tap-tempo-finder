@@ -328,6 +328,40 @@
   }
   .spotify-btn:active{ background: var(--brass-bright); }
 
+  .now-playing-bar{
+    position:relative; z-index:1;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin: 0 24px 16px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--brass);
+    background: rgba(212,168,67,0.08);
+  }
+  .now-playing-label{
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--brass-bright);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .stop-btn{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing:0.03em;
+    color: var(--ivory);
+    background: transparent;
+    border: 1px solid var(--brass-dim);
+    border-radius: 999px;
+    padding: 6px 12px;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .stop-btn:active{ background: rgba(212,168,67,0.14); }
+
   .footnote{
     margin-top: 18px;
     font-size: 11.5px;
@@ -374,6 +408,11 @@
   <div class="spotify-bar">
     <span class="spotify-status" id="spotifyStatus">Spotify: 未接続</span>
     <button class="spotify-btn" id="spotifyAuthBtn" type="button">Spotifyでログイン</button>
+  </div>
+
+  <div class="now-playing-bar" id="nowPlayingBar" style="display:none;">
+    <span class="now-playing-label" id="nowPlayingLabel"></span>
+    <button class="stop-btn" id="stopBtn" type="button">■ 停止</button>
   </div>
 
   <section class="matches">
@@ -445,6 +484,9 @@
   const soundToggle = document.getElementById('soundToggle');
   const spotifyStatusEl = document.getElementById('spotifyStatus');
   const spotifyAuthBtn = document.getElementById('spotifyAuthBtn');
+  const nowPlayingBarEl = document.getElementById('nowPlayingBar');
+  const nowPlayingLabelEl = document.getElementById('nowPlayingLabel');
+  const stopBtn = document.getElementById('stopBtn');
 
   let taps = [];
   let intervals = [];
@@ -457,6 +499,8 @@
   let player = null;
   let deviceId = null;
   let sdkReady = false;
+  let isPlaying = false;
+  let nowPlayingText = '';
 
   function getTempoTerm(bpm){
     if (bpm < 60) return 'Largo';
@@ -497,7 +541,7 @@
 
   async function redirectToSpotifyAuth(){
     const codeVerifier = generateRandomString(64);
-    sessionStorage.setItem('spotify_code_verifier', codeVerifier);
+    localStorage.setItem('spotify_code_verifier', codeVerifier);
     const codeChallenge = base64UrlEncode(await sha256(codeVerifier));
 
     const params = new URLSearchParams({
@@ -515,7 +559,7 @@
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     if (!code) return false;
-    const codeVerifier = sessionStorage.getItem('spotify_code_verifier');
+    const codeVerifier = localStorage.getItem('spotify_code_verifier');
     if (!codeVerifier) return false;
 
     const body = new URLSearchParams({
@@ -542,15 +586,15 @@
   function applyToken(data){
     accessToken = data.access_token;
     tokenExpiresAt = Date.now() + data.expires_in * 1000;
-    sessionStorage.setItem('spotify_access_token', accessToken);
-    sessionStorage.setItem('spotify_token_expires_at', String(tokenExpiresAt));
+    localStorage.setItem('spotify_access_token', accessToken);
+    localStorage.setItem('spotify_token_expires_at', String(tokenExpiresAt));
     if (data.refresh_token){
-      sessionStorage.setItem('spotify_refresh_token', data.refresh_token);
+      localStorage.setItem('spotify_refresh_token', data.refresh_token);
     }
   }
 
   async function refreshAccessToken(){
-    const rt = sessionStorage.getItem('spotify_refresh_token');
+    const rt = localStorage.getItem('spotify_refresh_token');
     if (!rt) return false;
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
@@ -572,11 +616,14 @@
 
   function logoutSpotify(){
     ['spotify_access_token','spotify_refresh_token','spotify_token_expires_at','spotify_code_verifier']
-      .forEach(k => sessionStorage.removeItem(k));
+      .forEach(k => localStorage.removeItem(k));
     accessToken = null;
     deviceId = null;
+    isPlaying = false;
+    nowPlayingText = '';
     if (player){ player.disconnect(); player = null; }
     updateSpotifyStatusUI();
+    updateNowPlayingUI();
     if (lastBpm !== null) renderMatches(lastBpm);
   }
 
@@ -603,7 +650,39 @@
       updateSpotifyStatusUI();
     });
     player.addListener('authentication_error', () => { refreshAccessToken(); });
+    player.addListener('player_state_changed', (state) => {
+      if (!state){
+        isPlaying = false;
+        nowPlayingText = '';
+      } else {
+        isPlaying = !state.paused;
+        const track = state.track_window && state.track_window.current_track;
+        if (track){
+          const artists = track.artists.map(a => a.name).join(', ');
+          nowPlayingText = track.name + ' - ' + artists;
+        }
+      }
+      updateNowPlayingUI();
+    });
     player.connect();
+  }
+
+  async function stopPlayback(){
+    if (!player) return;
+    try{
+      await player.pause();
+    } catch(e){
+      console.error(e);
+    }
+  }
+
+  function updateNowPlayingUI(){
+    if (isPlaying && nowPlayingText){
+      nowPlayingBarEl.style.display = 'flex';
+      nowPlayingLabelEl.textContent = '再生中: ' + nowPlayingText;
+    } else {
+      nowPlayingBarEl.style.display = 'none';
+    }
   }
 
   function updateSpotifyStatusUI(){
@@ -623,6 +702,8 @@
     if (accessToken) logoutSpotify();
     else redirectToSpotifyAuth();
   });
+
+  stopBtn.addEventListener('click', stopPlayback);
 
   async function searchTrack(song, retried){
     const q = encodeURIComponent(song.title + ' ' + song.artist);
@@ -684,11 +765,11 @@
   async function bootstrapSpotifyAuth(){
     const handled = await handleAuthRedirect();
     if (!handled){
-      const storedToken = sessionStorage.getItem('spotify_access_token');
-      const expiresAt = Number(sessionStorage.getItem('spotify_token_expires_at') || 0);
+      const storedToken = localStorage.getItem('spotify_access_token');
+      const expiresAt = Number(localStorage.getItem('spotify_token_expires_at') || 0);
       if (storedToken && Date.now() < expiresAt){
         accessToken = storedToken;
-      } else if (sessionStorage.getItem('spotify_refresh_token')){
+      } else if (localStorage.getItem('spotify_refresh_token')){
         await refreshAccessToken();
       }
     }
