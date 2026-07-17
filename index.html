@@ -464,6 +464,17 @@
   }
   .stop-btn:active{ background: rgba(212,168,67,0.14); }
 
+  .favorites-toggle-row{
+    position:relative; z-index:1;
+    margin: 0 24px 16px;
+  }
+  .favorites-toggle-row .sound-toggle{
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--panel-line);
+    background: rgba(255,255,255,0.02);
+  }
+
   .footnote{
     margin-top: 18px;
     font-size: 11.5px;
@@ -533,6 +544,10 @@
   <div class="now-playing-bar" id="nowPlayingBar" style="display:none;">
     <span class="now-playing-label" id="nowPlayingLabel"></span>
     <button class="stop-btn" id="stopBtn" type="button">■ 停止</button>
+  </div>
+
+  <div class="favorites-toggle-row">
+    <label class="sound-toggle"><input type="checkbox" id="favoritesToggle">お気に入りアーティストのみから選ぶ</label>
   </div>
 
   <section class="matches">
@@ -754,12 +769,75 @@
     {title:"アイネクライネ", artist:"米津玄師", bpm:90},
   ];
 
+  const FAVORITE_SONGS = [
+    {title:"悲しみは雪のように", artist:"浜田省吾", bpm:93},
+    {title:"蝋人形の館", artist:"聖飢魔II", bpm:133},
+    {title:"ランナウェイ", artist:"ラッツ&スター(シャネルズ)", bpm:123},
+    {title:"SOMEDAY", artist:"佐野元春", bpm:132},
+    {title:"MARIONETTE", artist:"BOOWY", bpm:160},
+    {title:"B・BLUE", artist:"BOOWY", bpm:145},
+    {title:"ROCKET DIVE", artist:"hide", bpm:183},
+    {title:"星空のディスタンス", artist:"THE ALFEE", bpm:120},
+    {title:"SAY YES", artist:"CHAGE&ASKA", bpm:92},
+    {title:"シーグラス", artist:"ストレイテナー", bpm:140},
+    {title:"Pretender", artist:"Official髭男dism", bpm:130},
+    {title:"First Love", artist:"宇多田ヒカル", bpm:70},
+    {title:"LA・LA・LA LOVE SONG", artist:"久保田利伸", bpm:120},
+    {title:"止まらないHa~Ha", artist:"矢沢永吉", bpm:140},
+    {title:"ファンキー・モンキー・ベイビー", artist:"キャロル", bpm:160},
+    {title:"何も言えなくて…夏", artist:"JAYWALK", bpm:85},
+    {title:"夜桜お七", artist:"坂本冬美", bpm:85},
+    {title:"ずっと好きだった", artist:"斉藤和義", bpm:155},
+    {title:"チェリー", artist:"スピッツ", bpm:138},
+    {title:"限界LOVERS", artist:"SHOW-YA", bpm:140},
+    {title:"本能", artist:"椎名林檎", bpm:97},
+    {title:"ワインレッドの心", artist:"安全地帯", bpm:68},
+    {title:"SOMEDAY", artist:"never young beach", bpm:100},
+    {title:"I Want It That Way", artist:"Backstreet Boys", bpm:100},
+    {title:"Superstition", artist:"Stevie Wonder", bpm:100},
+    {title:"Girlfriend", artist:"Avril Lavigne", bpm:138},
+    {title:"Complicated", artist:"Avril Lavigne", bpm:120},
+    {title:"Three Little Birds", artist:"Bob Marley", bpm:78},
+    {title:"Jamming", artist:"Bob Marley", bpm:105},
+    {title:"Rock and Roll All Nite", artist:"KISS", bpm:126},
+    {title:"I Was Made for Lovin' You", artist:"KISS", bpm:130},
+    {title:"I Got You (I Feel Good)", artist:"James Brown", bpm:112},
+    {title:"Papa's Got a Brand New Bag", artist:"James Brown", bpm:110},
+    {title:"Let It Be", artist:"The Beatles", bpm:71},
+    {title:"Come Together", artist:"The Beatles", bpm:82},
+    {title:"(I Can't Get No) Satisfaction", artist:"The Rolling Stones", bpm:136},
+    {title:"Paint It Black", artist:"The Rolling Stones", bpm:127},
+    {title:"Billie Jean", artist:"Michael Jackson", bpm:117},
+    {title:"Thriller", artist:"Michael Jackson", bpm:119},
+    {title:"Tutti Frutti", artist:"Little Richard", bpm:172},
+    {title:"Good Golly Miss Molly", artist:"Little Richard", bpm:150},
+    {title:"Johnny B. Goode", artist:"Chuck Berry", bpm:168},
+    {title:"Roll Over Beethoven", artist:"Chuck Berry", bpm:160},
+    {title:"Jailhouse Rock", artist:"Elvis Presley", bpm:170},
+    {title:"Can't Help Falling in Love", artist:"Elvis Presley", bpm:84},
+    {title:"Don't Stop Me Now", artist:"Queen", bpm:156},
+    {title:"Another One Bites the Dust", artist:"Queen", bpm:110},
+    {title:"Jump", artist:"Van Halen", bpm:130},
+    {title:"Panama", artist:"Van Halen", bpm:128},
+    {title:"Walk This Way", artist:"Aerosmith", bpm:106},
+    {title:"Sweet Emotion", artist:"Aerosmith", bpm:111},
+    {title:"Wonderful Tonight", artist:"Eric Clapton", bpm:82},
+    {title:"Layla", artist:"Eric Clapton", bpm:113},
+    {title:"Me and Bobby McGee", artist:"Janis Joplin", bpm:132},
+    {title:"Piece of My Heart", artist:"Janis Joplin", bpm:124},
+    {title:"Livin' on a Prayer", artist:"Bon Jovi", bpm:122},
+    {title:"It's My Life", artist:"Bon Jovi", bpm:130},
+    {title:"Purple Haze", artist:"Jimi Hendrix", bpm:111},
+    {title:"All Along the Watchtower", artist:"Jimi Hendrix", bpm:114},
+  ];
+
   const bpmNumberEl = document.getElementById('bpmNumber');
   const tempoTermEl = document.getElementById('tempoTerm');
   const tapCountEl = document.getElementById('tapCount');
   const tapZone = document.getElementById('tapZone');
   const pendulumArm = document.getElementById('pendulumArm');
   const songListEl = document.getElementById('songList');
+  const favoritesToggle = document.getElementById('favoritesToggle');
   const matchesHintEl = document.getElementById('matchesHint');
   const resetBtn = document.getElementById('resetBtn');
   const soundToggle = document.getElementById('soundToggle');
@@ -801,6 +879,14 @@
   let fadeIntervalHandle = null;
   const FADE_MS = 500;
   const DEFAULT_VOLUME = 0.8;
+
+  function getActiveSongs(){
+    return favoritesToggle.checked ? FAVORITE_SONGS : SONGS;
+  }
+
+  favoritesToggle.addEventListener('change', () => {
+    if (lastBpm !== null) renderMatches(lastBpm);
+  });
 
   function getTempoTerm(bpm){
     if (bpm < 60) return 'Largo';
@@ -1167,7 +1253,7 @@
 
   function renderMatches(bpm){
     lastBpm = bpm;
-    const scored = SONGS.map(s => {
+    const scored = getActiveSongs().map(s => {
       const candidates = [
         {diff: Math.abs(s.bpm - bpm), label:'同じ速さ'},
         {diff: Math.abs(s.bpm - bpm * 2), label:'半分の速さ'},
@@ -1303,7 +1389,7 @@
     autoBtnEl.disabled = true;
     autoBtnEl.textContent = '曲を検索中…';
 
-    const scored = SONGS.map(s => {
+    const scored = getActiveSongs().map(s => {
       const candidates = [
         {diff: Math.abs(s.bpm - bpm)},
         {diff: Math.abs(s.bpm - bpm * 2)},
